@@ -1,0 +1,25 @@
+#SPDX-License-Identifier: MIT
+---
+- import_tasks: find_upgrade_paths.yml
+
+- block: 
+  - name: Create backup
+    include_tasks: backup.yml
+  - name: Begin upgrade
+    include_tasks: upgrade.yml
+  when: upgrade_targets is defined and upgrade_targets | length > 0
+  rescue:
+    - import_tasks: fallback.yml
+
+- name: Flush handlers (run handlers immediately)
+  meta: flush_handlers
+
+- name: Continue on upgrade path until all updates are done
+  include_role:
+    name: pangolin-update
+  when: "fully_upgrade == True and upgrade_status == 'updates_partial'"  
+
+- name: Show update status
+  command: /bin/true
+  notify: 
+   - show_update_status

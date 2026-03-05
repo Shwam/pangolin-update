@@ -1,0 +1,22 @@
+#SPDX-License-Identifier: MIT
+---
+# vars file for pangolin-update
+backup_destination: "/root/pangolin_backups/"
+
+web_api_port: 3001
+
+fully_upgrade: True
+
+images:
+  pangolin: docker.io/fosrl/pangolin
+  gerbil: docker.io/fosrl/gerbil
+  traefik: docker.io/traefik
+
+status_message:
+  default: "Could not fetch updates."
+  updates_checked: "Pangolin is already up-to-date." 
+  updates_present: "Unable to perform backup. Halting upgrade to prevent data loss."
+  backup_restore_started: "The upgrade failed. The backup was restored, but it failed to start back up."
+  backup_restored: "The upgrade failed. The backup was successfully restored, but no updates were applied."
+  updates_succeeded: "Updates successful! You are on the latest version."
+  updates_partial: "Updates succeeded, but there are still more to apply."

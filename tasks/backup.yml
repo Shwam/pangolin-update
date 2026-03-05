@@ -1,0 +1,18 @@
+#SPDX-License-Identifier: MIT
+---
+- name: Set filename for backup directory
+  ansible.builtin.set_fact:
+    backup_destination_path: "{{ backup_destination }}{{ now().strftime('%Y%m%d-%H%M%S') }}"
+
+- name: Create backup dir
+  ansible.builtin.file:
+    path: "{{ backup_destination_path }}"
+    state: directory
+
+- name: Stop service prior to back-up, to ensure database integrity
+  community.docker.docker_compose_v2:
+    project_src: "{{ pangolin_dir }}"
+    state: absent
+
+- name: Back up pangolin config
+  command: "tar -czf {{ backup_destination_path }}/backup.tgz -C {{ pangolin_dir }} ."

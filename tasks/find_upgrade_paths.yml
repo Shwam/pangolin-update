@@ -1,0 +1,55 @@
+#SPDX-License-Identifier: MIT
+---
+- name: Initialize information
+  ansible.builtin.set_fact:
+    pangolin_versions: {}
+    upgrade_path: {}
+    upgrade_targets: {}
+
+- name: Read pangolin docker-compose
+  ansible.builtin.slurp:
+    src: "{{ (pangolin_dir, 'docker-compose.yml') | path_join }}" 
+  register: docker_compose_file
+- name: Read traefik configuration
+  ansible.builtin.slurp:
+    src: "{{ (pangolin_dir, 'config/traefik/traefik_config.yml') | path_join }}"
+  register: traefik_config_file
+
+- name: Parse docker-compose
+  ansible.builtin.set_fact:
+    docker_compose: "{{ docker_compose_file['content'] | b64decode | from_yaml }}"
+- name: Parse traefik config
+  ansible.builtin.set_fact:
+    traefik_config: "{{ traefik_config_file['content'] | b64decode | from_yaml }}"
+
+- name: Identify pangolin/gerbil/traefik versions from docker-compose
+  set_fact:
+    pangolin_versions: "{{ pangolin_versions|default({}) | combine({ item: docker_compose['services'][item]['image'].split(':')[-1] }) }}"
+  loop:
+    - pangolin
+    - gerbil
+    - traefik
+  when: "item in docker_compose['services']"
+      
+- name: Identify current badger version from traefik config
+  set_fact:
+    pangolin_versions: "{{ pangolin_versions | combine({'badger': traefik_config.experimental.plugins.badger.version.split(':')[-1]}) }}"
+
+- name: Determine upgrade path
+  delegate_to: localhost
+  ansible.builtin.script:
+    cmd: "files/upgrade_path.py {{ pangolin_versions['pangolin'] }} {{ pangolin_versions['traefik'] }} {{ pangolin_versions['badger'] }} {{ pangolin_versions.get('gerbil', '') }}"
+    executable: /usr/bin/python3
+  register: upgrade_path
+  notify: updates_checked
+
+- name: Set upgrade paths
+  ansible.builtin.set_fact:
+    upgrade_path: "{{ upgrade_path.stdout | from_json }}"
+
+- name: Designate services for upgrade
+  set_fact:
+    upgrade_targets: "{{ upgrade_targets|default({}) | combine({ item.key: item.value[0] }) }}"
+  loop: "{{ upgrade_path | dict2items }}"
+  when: (item.value | length) > 0
+  notify: updates_present

@@ -1,0 +1,27 @@
+#SPDX-License-Identifier: MIT
+---
+# handlers file for pangolin-update
+
+- name: "updates_checked"
+  set_fact:
+    upgrade_status: "updates_checked"
+
+- name: "backup_restored"
+  set_fact:
+    upgrade_status: "backup_restored"
+
+- name: "backup_restore_started"
+  set_fact:
+    upgrade_status: "backup_restore_started"
+
+- name: "updates_succeeded"
+  set_fact:
+    upgrade_status: "updates_succeeded"
+
+- name: "updates_partial"
+  set_fact:
+    upgrade_status: "updates_partial"
+
+- name: "show_update_status"
+  debug:
+    msg: "{{ status_message[upgrade_status|default('default')] }}"

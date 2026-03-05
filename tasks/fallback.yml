@@ -1,0 +1,55 @@
+#SPDX-License-Identifier: MIT
+---
+# Version fallback - restore old version, if update failed
+- name: UPGRADE FAILED! Restoring backup...
+  debug:
+    msg: "Failed to upgrade {{ item.key }} to {{ item.value }}. Restoring to version {{ pangolin_versions[item.key] }}..."
+  loop: "{{ upgrade_targets | dict2items }}"
+
+- name: Set upgrade status
+  ansible.builtin.set_fact:
+    upgrade_status: "backup_restore_starting"
+
+- name: Capture docker logs
+  command:
+    cmd: "docker logs {{ item }}"
+  register: docker_logs
+  loop: "{{ docker_compose['services'].keys() | list }}" 
+
+- name: Save docker logs to backup dir 
+  ansible.builtin.copy:
+    content: "{{ item.stdout + '\n' + item.stderr }}"
+    dest: "{{ backup_destination_path }}/docker-{{ item.cmd|last }}.log"
+  loop: "{{ docker_logs.results }}"
+
+- name: Stop pangolin
+  community.docker.docker_compose_v2:
+    project_src: "{{ pangolin_dir }}"
+    state: absent
+
+- name: "Restore latest pangolin backup"
+  command: "tar -xvf {{ backup_destination_path }}/backup.tgz -C {{ pangolin_dir }}"
+
+- name: Restart from restored version
+  community.docker.docker_compose_v2:
+    project_src: "{{ pangolin_dir }}"
+    state: present
+  notify: 
+    - backup_restore_started
+
+- name: "Validate that the service started back up after restoration"
+  delegate_to: localhost
+  ansible.builtin.uri:
+    url: "http://{{ inventory_hostname }}"
+    method: GET
+    return_content: True
+    validate_certs: False
+  register:
+    pangolin_web_uri
+  retries: 3
+  delay: 15
+  failed_when: "pangolin_web_uri.status != 200"
+  notify: 
+    - backup_restored
+  
+#      - name: Send alert detailing update failure + fallback status

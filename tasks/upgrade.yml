@@ -1,0 +1,55 @@
+#SPDX-License-Identifier: MIT
+---
+- name: Modify docker-compose with new versions
+  lineinfile:
+    path: "{{ (pangolin_dir, 'docker-compose.yml') | path_join }}"
+    regexp: '^(\s*image:.*{{ item.key }}:(ee-)?)'
+    line: '\g<1>{{ item.value }}'
+    backrefs: yes
+    state: present
+  loop: "{{ upgrade_targets | dict2items | rejectattr('key', 'equalto', 'badger') }}"
+
+- name: Update badger version in traefik config
+  lineinfile:
+    path: "{{ (pangolin_dir, 'config/traefik/traefik_config.yml') | path_join }}"
+    regexp: '^(\s*version:\s*)'
+    line: '\g<1>{{ upgrade_targets["badger"] }}'
+    backrefs: yes
+    state: present
+  when: '"badger" in upgrade_targets'
+
+- name: Stop pangolin
+  community.docker.docker_compose_v2:
+    project_src: "{{ pangolin_dir }}"
+    state: absent
+
+- name: Restart pangolin
+  community.docker.docker_compose_v2:
+    project_src: "{{ pangolin_dir }}"
+    state: present
+
+- name: Assert pangolin container health
+  command: "docker ps --format json --filter name={{ item }}"  
+  register: container_info
+  until: "(container_info.stdout | from_json | json_query('State')) == 'running' and 'second' not in (container_info.stdout | from_json | json_query('Status'))"
+  retries: 4
+  delay: 30
+  loop: "{{ docker_compose['services'].keys() | list }}" 
+
+- name: Validate that pangolin is reachable
+  delegate_to: localhost
+  ansible.builtin.uri:
+    url: "http://{{ inventory_hostname }}"
+    method: GET
+    return_content: True
+    validate_certs: False
+  retries: 10
+  delay: 30
+  changed_when: True
+  notify: updates_succeeded
+
+- name: Check if there are more updates to perform
+  command: "/bin/true"
+  when: " item.value|length > 1"
+  loop: "{{ upgrade_path | dict2items }}"
+  notify: updates_partial
