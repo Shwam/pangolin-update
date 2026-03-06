@@ -24,21 +24,21 @@
 
 - name: Identify pangolin/gerbil/traefik versions from docker-compose
   set_fact:
-    pangolin_versions: "{{ pangolin_versions|default({}) | combine({ item: docker_compose['services'][item]['image'].split(':')[-1] }) }}"
-  loop:
-    - pangolin
-    - gerbil
-    - traefik
-  when: "item in docker_compose['services']"
+    pangolin_versions: "{{ pangolin_versions|default({}) | combine({ item: docker_compose['services'][item]['image'] }) }}"
+  loop: "{{ docker_compose['services'].keys() | list }}" 
       
 - name: Identify current badger version from traefik config
   set_fact:
-    pangolin_versions: "{{ pangolin_versions | combine({'badger': traefik_config.experimental.plugins.badger.version.split(':')[-1]}) }}"
+    pangolin_versions: "{{ pangolin_versions | combine({'badger': traefik_config.experimental.plugins.badger.version }) }}"
+
+- name: Log current versions
+  debug:
+    var: pangolin_versions
 
 - name: Determine upgrade path
   delegate_to: localhost
   ansible.builtin.script:
-    cmd: "files/upgrade_path.py {{ pangolin_versions['pangolin'] }} {{ pangolin_versions['traefik'] }} {{ pangolin_versions['badger'] }} {{ pangolin_versions.get('gerbil', '') }}"
+    cmd: "files/upgrade_path.py '{{ pangolin_versions | to_json }}'"
     executable: /usr/bin/python3
   register: upgrade_path
   notify: updates_checked

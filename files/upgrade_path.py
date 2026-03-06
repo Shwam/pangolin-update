@@ -5,6 +5,18 @@ import sys
 import json
 import time
 
+IMAGE_HOSTS = {
+    'gitlab': {
+        'badger': 'fosrl/badger',
+    },
+    'docker': { # These are gatherd automatically from docker-compose now, but you can specify them here if desired
+        #'gerbil': 'fosrl/gerbil',
+        #'pangolin': 'fosrl/pangolin',
+        #'traefik': 'library/traefik',
+        #'crowdsec': 'crowdsecurity/crowdsec',
+    },
+}
+
 @total_ordering
 class Version:
     def __init__(self, version):
@@ -70,10 +82,11 @@ def version_filter(versions, v_prefix=None):
     versions = sorted(versions)#, key=lambda v: v.split('.'))
     return versions
 
-def gitlab_repo_versions(owner, repo, v_prefix=None):
+def gitlab_repo_versions(repo, v_prefix=None):
+    # repo should be in the form 'owner/repo'
     for i in range(3):
         try:
-            response = requests.get(f"https://api.github.com/repos/{owner}/{repo}/releases")
+            response = requests.get(f"https://api.github.com/repos/{repo}/releases")
             result = response.json()
             versions = [obj['name'] for obj in result]
             versions = version_filter(versions, v_prefix)
@@ -82,10 +95,10 @@ def gitlab_repo_versions(owner, repo, v_prefix=None):
             time.sleep(5)
             continue
 
-def docker_hub_versions(repo, project, v_prefix=None):
+def docker_hub_versions(repo, v_prefix=None):
     for i in range(3):
         try:
-            response = requests.get(f"https://hub.docker.com/v2/repositories/{repo}/{project}/tags?page_size=1000").json()
+            response = requests.get(f"https://hub.docker.com/v2/repositories/{repo}/tags?page_size=1000").json()
             versions = [obj['name'] for obj in response['results']]
             versions = version_filter(versions, v_prefix)
             return versions
@@ -107,20 +120,45 @@ def upgrade_path(starting_version, versions):
     return path
 
 if __name__ == "__main__":
-    service_names = ["pangolin", "traefik", "badger", "gerbil"]
-    service_versions = dict()
-    service_versions['pangolin'] = gitlab_repo_versions('fosrl', 'pangolin')
-    service_versions['badger'] = gitlab_repo_versions('fosrl', 'badger')
-    service_versions['gerbil'] = gitlab_repo_versions('fosrl', 'gerbil')
-    service_versions['traefik'] = docker_hub_versions('library', 'traefik', v_prefix=False)
     
-    initial_versions = dict()
     upgrade_paths = dict()
-    for i in range(len(sys.argv)-1):
-        service = service_names[i]
-        initial_versions[service_names[i]] = Version(sys.argv[i+1])
-        _upgrade_path = [v.version for v in upgrade_path(initial_versions[service], service_versions[service])]
-        if _upgrade_path:
-            upgrade_paths[service] = _upgrade_path
+    # Grab input as json
+    images = json.loads(sys.argv[1])
+    for service in images:
+        # Get current version
+        initial_version = Version(images[service].split(":")[-1])
+        v_prefix = initial_version.version[0] == "v"
+        if initial_version.version == "latest": # Don't try to upgrade beyond 'latest'
+            continue
+
+        # Find available versions using hard-coded image hosts
+        service_versions = None
+        if service in IMAGE_HOSTS.get('gitlab', {}):
+            service_versions = gitlab_repo_versions(IMAGE_HOSTS['gitlab'][service], v_prefix=v_prefix)
+        elif service in IMAGE_HOSTS.get('docker', {}):
+            service_versions = docker_hub_versions(IMAGE_HOSTS['docker'][service], v_prefix=v_prefix)
+
+        # Automatically try to find available version on docker hub
+        full_image_host = images[service].split(":")[0].split("/")
+        if service_versions == None and full_image_host[0] == "docker.io":
+            image_name = None
+            if len(full_image_host) == 3:
+                image_name = "/".join(full_image_host[1:])
+            elif len(full_image_host) == 2:
+                image_name = "/".join(("library", full_image_host[-1]))
+            else:
+                continue
+                
+            # Try to find service on docker hub
+            service_versions = docker_hub_versions(image_name, v_prefix=v_prefix)
+
+
+        if not service_versions:
+            print(f"WARNING: Could not find any valid service versions for {service}")
+        else:
+            # Find upgrade path
+            _upgrade_path = [v.version for v in upgrade_path(initial_version, service_versions)]
+            if _upgrade_path:
+                upgrade_paths[service] = _upgrade_path
     
     print(json.dumps(upgrade_paths))
