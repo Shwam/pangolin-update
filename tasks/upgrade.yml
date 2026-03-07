@@ -28,11 +28,15 @@
     project_src: "{{ pangolin_dir }}"
     state: present
 
-- name: Wait for docker containers to become healthy
+- name: Give the docker containers some time to start up
+  ansible.builtin.pause:
+    seconds: 75
+
+- name: Validate docker container health
   command: "docker ps --format json --filter name={{ item }}"  
   register: container_info
   until: "(container_info.stdout | from_json | json_query('State')) == 'running' and 'second' not in (container_info.stdout | from_json | json_query('Status'))"
-  retries: 5
+  retries: 3
   delay: 30
   loop: "{{ docker_compose['services'].keys() | list }}" 
 
