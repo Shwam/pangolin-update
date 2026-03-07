@@ -15,6 +15,7 @@
     cmd: "docker logs {{ item }}"
   register: docker_logs
   loop: "{{ docker_compose['services'].keys() | list }}" 
+  ignore_errors: True
 
 - name: Save docker logs to backup dir 
   ansible.builtin.copy:

@@ -28,11 +28,11 @@
     project_src: "{{ pangolin_dir }}"
     state: present
 
-- name: Assert pangolin container health
+- name: Wait for docker containers to become healthy
   command: "docker ps --format json --filter name={{ item }}"  
   register: container_info
   until: "(container_info.stdout | from_json | json_query('State')) == 'running' and 'second' not in (container_info.stdout | from_json | json_query('Status'))"
-  retries: 4
+  retries: 5
   delay: 30
   loop: "{{ docker_compose['services'].keys() | list }}" 
 
