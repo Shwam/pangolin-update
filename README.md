@@ -1,18 +1,18 @@
-Role Name
+pangolin-update
 =========
 
-A brief description of the role goes here.
+Upgrade pangolin & its various dependencies to the latest version, following the recommended upgrade path.
 
 Requirements
 ------------
 
-community.docker
+- community.docker
 
 Role Variables
 --------------
 
-`pangolin_dir` - Path to pangolin, default: `/home/ansible/pangolin`
-`backup_destination` - Directory to back up pangolin to, default: `/home/ansible/pangolin_backups`
+- `pangolin_dir` - Path to pangolin, default: `/home/ansible/pangolin`
+- `backup_destination` - Directory to back up pangolin to, default: `/home/ansible/pangolin_backups`
 
 Example Playbook
 ----------------
